@@ -10,6 +10,9 @@
 #include <sstream>
 #include "Json.hpp"
 
+#include <iomanip>
+#include <sstream>
+#include <ctime>
 using json = nlohmann::json;
 
 // CSV Parser from the provided code
@@ -471,11 +474,11 @@ public:
                 int id = link_data["link_id"];
                 int from = link_data["from_node_id"];
                 int to = link_data["to_node_id"];
-                double fftt = link_data["fftt"];
+                double fftt = link_data["VDF_fftt"];
                 int lanes = link_data["lanes"];
                 double capacity = link_data["capacity"];
-                double alpha = link_data["vdf_alpha"];
-                double beta = link_data["vdf_beta"];
+                double alpha = link_data["VDF_alpha"];
+                double beta = link_data["VDF_beta"];
 
                 links.emplace(id, Link(id, from, to, fftt, lanes, capacity, alpha, beta));
             }
@@ -559,12 +562,15 @@ public:
 
 private:
     bool loadNodesFromCSV(const std::string& filename) {
+        std::cout << "Loading nodes from file: " << filename << std::endl;
+
         CDTACSVParser parser;
         if (!parser.OpenCSVFile(filename, true)) {
             std::cerr << "Error: Could not open file " << filename << std::endl;
             return false;
         }
 
+        int count = 0;
         while (parser.ReadRecord()) {
             int node_id;
             int zone_id;
@@ -577,6 +583,12 @@ private:
                 parser.GetValueByFieldName("y_coord", y_coord, true)) {
 
                 nodes.emplace(node_id, Node(node_id, zone_id, x_coord, y_coord));
+                count++;
+
+                // Print progress every 100 nodes
+                if (count % 100 == 0) {
+                    std::cout << "  Loaded " << count << " nodes so far..." << std::endl;
+                }
             }
         }
 
@@ -591,78 +603,196 @@ private:
         }
 
         parser.CloseCSVFile();
+        std::cout << "Successfully loaded " << num_nodes << " nodes with " << num_zones << " zones" << std::endl;
         return true;
     }
 
     bool loadLinksFromCSV(const std::string& filename) {
+        std::cout << "Loading links from file: " << filename << std::endl;
         CDTACSVParser parser;
         if (!parser.OpenCSVFile(filename, true)) {
             std::cerr << "Error: Could not open file " << filename << std::endl;
             return false;
         }
 
+        int count = 0;
+
+        // Print the headers
+        std::cout << "\nFirst few links with detailed attributes:" << std::endl;
+        std::cout << "-----------------------------------------------------------------------" << std::endl;
+        std::cout << "Link ID | From Node | To Node | Free Flow Time | Lanes | Capacity | Alpha | Beta" << std::endl;
+        std::cout << "-----------------------------------------------------------------------" << std::endl;
+
         while (parser.ReadRecord()) {
-            int link_id;
             int from_node_id;
             int to_node_id;
-            double fftt;
-            double lanes;
-            double capacity;
-            double vdf_alpha;
-            double vdf_beta;
 
-            if (parser.GetValueByFieldName("link_id", link_id, true) &&
-                parser.GetValueByFieldName("from_node_id", from_node_id, true) &&
-                parser.GetValueByFieldName("to_node_id", to_node_id, true) &&
-                parser.GetValueByFieldName("fftt", fftt, true) &&
-                parser.GetValueByFieldName("lanes", lanes, true) &&
-                parser.GetValueByFieldName("capacity", capacity, true) &&
-                parser.GetValueByFieldName("VDF_alpha", vdf_alpha, true) &&
-                parser.GetValueByFieldName("VDF_beta", vdf_beta, true)) {
 
+            // Set default values first
+            int link_id = count + 1; // Auto-generate link ID if not found
+            double fftt = 1.0;       // Default free flow travel time (1 minute)
+            double lanes = 1.0;      // Default 1 lane
+            double capacity = 1800.0; // Default capacity (1800 vehicles per hour per lane)
+            double vdf_alpha = 0.15;  // Default BPR alpha parameter
+            double vdf_beta = 4.0;    // Default BPR beta parameter
+
+            // Try to read link_id (not required)
+            parser.GetValueByFieldName("link_id", link_id, false);
+
+            // Required fields - only from_node_id and to_node_id
+            if (parser.GetValueByFieldName("from_node_id", from_node_id, true) &&
+                parser.GetValueByFieldName("to_node_id", to_node_id, true)) {
+
+                // Non-required fields with defaults - using GMNS standard names
+                parser.GetValueByFieldName("VDF_fftt", fftt, false);
+                parser.GetValueByFieldName("lanes", lanes, false);
+                parser.GetValueByFieldName("capacity", capacity, false);
+                parser.GetValueByFieldName("VDF_alpha", vdf_alpha, false);
+                parser.GetValueByFieldName("VDF_beta", vdf_beta, false);
+
+                // Check for reasonable values and apply constraints
+                if (fftt <= 0) fftt = 1.0;        // Ensure positive travel time
+                if (lanes <= 0) lanes = 1.0;      // Ensure at least one lane
+                if (capacity <= 0) capacity = 1800.0; // Ensure positive capacity
+                if (vdf_alpha < 0) vdf_alpha = 0.15;  // Ensure non-negative alpha
+                if (vdf_beta < 0) vdf_beta = 4.0;     // Ensure non-negative beta
+
+                // Create the link
                 links.emplace(link_id, Link(link_id, from_node_id, to_node_id, fftt, lanes, capacity, vdf_alpha, vdf_beta));
+
+                // Print detailed info for first 5 links
+                if (count < 5) {
+                    std::cout << std::setw(7) << link_id << " | ";
+                    std::cout << std::setw(9) << from_node_id << " | ";
+                    std::cout << std::setw(7) << to_node_id << " | ";
+                    std::cout << std::setw(14) << std::fixed << std::setprecision(2) << fftt << " | ";
+                    std::cout << std::setw(5) << std::fixed << std::setprecision(0) << lanes << " | ";
+                    std::cout << std::setw(8) << std::fixed << std::setprecision(0) << capacity << " | ";
+                    std::cout << std::setw(5) << std::fixed << std::setprecision(2) << vdf_alpha << " | ";
+                    std::cout << std::setw(4) << std::fixed << std::setprecision(2) << vdf_beta << std::endl;
+                }
+
+                // Print progress every 100 links
+                if (count > 0 && count % 100 == 0) {
+                    std::cout << "Loaded " << count << " links so far..." << std::endl;
+                }
+
+                count++;
             }
+            else {
+                std::cout << "Warning: Skipping link due to missing required fields at line "
+                    << (count + 1) << std::endl;
+            }
+
+
+            
         }
+
+        std::cout << "-----------------------------------------------------------------------" << std::endl;
 
         num_links = links.size();
         parser.CloseCSVFile();
+
+        // Calculate total capacity stats
+        double total_capacity = 0.0;
+        double min_capacity = std::numeric_limits<double>::max();
+        double max_capacity = 0.0;
+
+        for (const auto& link_pair : links) {
+            double link_capacity = link_pair.second.capacity * link_pair.second.lanes;
+            total_capacity += link_capacity;
+            min_capacity = std::min(min_capacity, link_capacity);
+            max_capacity = std::max(max_capacity, link_capacity);
+        }
+
+        double avg_capacity = num_links > 0 ? total_capacity / num_links : 0;
+
+        std::cout << "Successfully loaded " << num_links << " links" << std::endl;
+        std::cout << "Capacity statistics:" << std::endl;
+        std::cout << "  - Total: " << total_capacity << std::endl;
+        std::cout << "  - Average: " << avg_capacity << " per link" << std::endl;
+        std::cout << "  - Min: " << min_capacity << std::endl;
+        std::cout << "  - Max: " << max_capacity << std::endl;
+
         return true;
     }
-
     bool loadRoutesFromCSV(const std::string& filename) {
+        std::cout << "Loading routes from file: " << filename << std::endl;
+
         CDTACSVParser parser;
         if (!parser.OpenCSVFile(filename, true)) {
             std::cerr << "Error: Could not open file " << filename << std::endl;
             return false;
         }
 
+        num_modes = 1; // Default to 1 mode if not specified
+        int count = 0;
+        int skipped = 0;
+        double total_initial_volume = 0.0;
 
-         num_modes = 1; // Default to 1 mode if not specified
+        // Print header for first few routes
+        std::cout << "\nFirst few routes with detailed attributes:" << std::endl;
+        std::cout << "-----------------------------------------------------------------------------------------" << std::endl;
+        std::cout << "Route ID | Mode | Origin | Destination | # Links | Initial Volume | First 3 Links" << std::endl;
+        std::cout << "-----------------------------------------------------------------------------------------" << std::endl;
 
         while (parser.ReadRecord()) {
-            int mode;
-            int o_zone_id;
-            int d_zone_id;
-            int route_id;
+            // Default values
+            int mode = 1;
+            int o_zone_id = 0;
+            int d_zone_id = 0;
+            int route_id = count + 1;
+            double initial_volume = 0.0;
 
-            if (parser.GetValueByFieldName("mode", mode, true) &&
-                parser.GetValueByFieldName("o_zone_id", o_zone_id, true) &&
-                parser.GetValueByFieldName("d_zone_id", d_zone_id, true) &&
-                parser.GetValueByFieldName("route_id", route_id, true)) {
+            // Try to read values - only require origin and destination
+            parser.GetValueByFieldName("mode", mode, false);
+            bool has_origin = parser.GetValueByFieldName("o_zone_id", o_zone_id, false);
+            bool has_dest = parser.GetValueByFieldName("d_zone_id", d_zone_id, false);
+            parser.GetValueByFieldName("route_id", route_id, false);
 
+            // Try to read initial volume if available
+            parser.GetValueByFieldName("volume", initial_volume, false);
+            parser.GetValueByFieldName("flow", initial_volume, false); // Alternative field name
+
+            // Check if we have the minimum required fields
+            if (has_origin && has_dest) {
                 // For link_ids, we need to handle them specially since they're a sequence
                 std::vector<int> link_ids;
-
-                // Try to see if there's a field called "link_ids" that contains the sequence
                 std::string link_ids_str;
-                if (parser.GetStringValueByFieldName("link_ids", link_ids_str, false)) {
 
+                if (parser.GetValueByFieldName("link_ids", link_ids_str, false)) {
                     parser.ParserIntSequence(link_ids_str, link_ids);
-
                 }
 
                 if (!link_ids.empty()) {
-                    routes.emplace_back(mode, o_zone_id, d_zone_id, route_id, link_ids);
+                    // Create the route with the initial volume as flow
+                    Route route(mode, o_zone_id, d_zone_id, route_id, link_ids);
+                    route.flow = initial_volume; // Set initial flow/volume
+                    routes.push_back(route);
+
+                    total_initial_volume += initial_volume;
+
+                    // Print detailed info for first 5 routes
+                    if (count < 5) {
+                        std::cout << std::setw(8) << route_id << " | ";
+                        std::cout << std::setw(4) << mode << " | ";
+                        std::cout << std::setw(7) << o_zone_id << " | ";
+                        std::cout << std::setw(11) << d_zone_id << " | ";
+                        std::cout << std::setw(7) << link_ids.size() << " | ";
+                        std::cout << std::setw(14) << std::fixed << std::setprecision(2) << initial_volume << " | ";
+
+                        // Print first 3 links (or fewer if route has fewer)
+                        for (size_t i = 0; i < std::min(size_t(3), link_ids.size()); i++) {
+                            std::cout << link_ids[i];
+                            if (i < std::min(size_t(2), link_ids.size() - 1)) {
+                                std::cout << ", ";
+                            }
+                        }
+                        if (link_ids.size() > 3) {
+                            std::cout << ", ...";
+                        }
+                        std::cout << std::endl;
+                    }
 
                     // Check if OD pair exists
                     bool found = false;
@@ -680,64 +810,257 @@ private:
                         od.route_indices.push_back(routes.size() - 1);
                         od_pairs.push_back(od);
                     }
+
+                    // Print progress every 100 routes
+                    if (count > 0 && count % 100 == 0) {
+                        std::cout << "Loaded " << count << " routes so far..." << std::endl;
+                    }
+
+                    count++;
                 }
                 else {
                     std::cerr << "Warning: No link sequence found for route " << route_id
                         << " (mode=" << mode << ", o=" << o_zone_id << ", d=" << d_zone_id << ")" << std::endl;
+                    skipped++;
                 }
+            }
+            else {
+                std::cerr << "Warning: Skipping route due to missing origin/destination at line "
+                    << (count + skipped + 1) << std::endl;
+                skipped++;
             }
         }
 
+        std::cout << "-----------------------------------------------------------------------------------------" << std::endl;
+
         parser.CloseCSVFile();
+
+        // Print summary statistics
+        std::cout << "Successfully loaded " << count << " routes" << std::endl;
+        std::cout << "Skipped " << skipped << " invalid routes" << std::endl;
+        std::cout << "Total initial route volume: " << total_initial_volume << std::endl;
+        std::cout << "Route statistics:" << std::endl;
+
+        // Calculate some route statistics
+        if (count > 0) {
+            int min_links = INT_MAX;
+            int max_links = 0;
+            double total_links = 0;
+            std::map<std::pair<int, int>, int> od_route_count;
+            double max_initial_volume = 0.0;
+            double routes_with_volume = 0;
+
+            for (const auto& route : routes) {
+                int route_links = route.link_ids.size();
+                min_links = std::min(min_links, route_links);
+                max_links = std::max(max_links, route_links);
+                total_links += route_links;
+
+                // Count routes per OD pair
+                od_route_count[std::make_pair(route.origin_zone, route.dest_zone)]++;
+
+                // Track volume statistics
+                if (route.flow > 0) {
+                    routes_with_volume++;
+                    max_initial_volume = std::max(max_initial_volume, route.flow);
+                }
+            }
+
+            double avg_links = total_links / count;
+            int max_routes_per_od = 0;
+            int od_with_one_route = 0;
+
+            for (const auto& od_count : od_route_count) {
+                max_routes_per_od = std::max(max_routes_per_od, od_count.second);
+                if (od_count.second == 1) {
+                    od_with_one_route++;
+                }
+            }
+
+            std::cout << "  - Number of OD pairs: " << od_pairs.size() << std::endl;
+            std::cout << "  - Avg. links per route: " << avg_links << std::endl;
+            std::cout << "  - Min links in a route: " << min_links << std::endl;
+            std::cout << "  - Max links in a route: " << max_links << std::endl;
+            std::cout << "  - Max routes for a single OD pair: " << max_routes_per_od << std::endl;
+            std::cout << "  - OD pairs with only one route: " << od_with_one_route
+                << " (" << (100.0 * od_with_one_route / od_pairs.size()) << "%)" << std::endl;
+            std::cout << "  - Routes with initial volume: " << routes_with_volume
+                << " (" << (100.0 * routes_with_volume / count) << "%)" << std::endl;
+            std::cout << "  - Maximum initial route volume: " << max_initial_volume << std::endl;
+        }
+
+        // After loading all routes, calculate OD demands based on initial volumes
+        std::cout << "\nCalculating OD demands from initial route volumes..." << std::endl;
+        int updated_od_pairs = 0;
+        double total_demand = 0.0;
+
+        for (auto& od : od_pairs) {
+            double total_od_volume = 0.0;
+
+            // Sum up all route volumes for this OD pair
+            for (int route_idx : od.route_indices) {
+                total_od_volume += routes[route_idx].flow;
+            }
+
+            // Update OD demand based on sum of route volumes
+            if (total_od_volume > 0) {
+                od.demand = total_od_volume;
+                total_demand += total_od_volume;
+                updated_od_pairs++;
+            }
+        }
+
+        std::cout << "Updated demands for " << updated_od_pairs << " OD pairs based on initial route volumes." << std::endl;
+        std::cout << "Total system demand from initial volumes: " << total_demand << std::endl;
+
+        // Print first 5 OD pairs with demand for verification
+        if (updated_od_pairs > 0) {
+            std::cout << "\nSample OD pairs with demand:" << std::endl;
+            std::cout << "------------------------------------------------------" << std::endl;
+            std::cout << "Mode | Origin | Destination | Demand | Routes" << std::endl;
+            std::cout << "------------------------------------------------------" << std::endl;
+
+            int shown = 0;
+            for (const auto& od : od_pairs) {
+                if (od.demand > 0 && shown < 5) {
+                    std::cout << std::setw(4) << od.mode << " | "
+                        << std::setw(6) << od.origin << " | "
+                        << std::setw(11) << od.destination << " | "
+                        << std::setw(6) << std::fixed << std::setprecision(1) << od.demand << " | "
+                        << od.route_indices.size() << std::endl;
+                    shown++;
+                }
+            }
+            std::cout << "------------------------------------------------------" << std::endl;
+        }
+
         return true;
     }
 };
 
-// Traffic Assignment class
-class TrafficAssignment {
+
+// Add this to your TrafficAssignment class
+class TrafficAssignmentLog {
 private:
     Network& network;
     double logit_theta;
     int max_iterations;
     double convergence_threshold;
 
+    // Logging options
+    bool enable_logging;
+    std::string log_directory;
+    int log_level; // 0: minimal, 1: basic, 2: detailed, 3: verbose
+
 public:
-    TrafficAssignment(Network& net, double theta = 0.1, int max_iter = 100, double conv_threshold = 0.001)
-        : network(net), logit_theta(theta), max_iterations(max_iter), convergence_threshold(conv_threshold) {}
+    TrafficAssignmentLog(Network& net, double theta = 0.1, int max_iter = 100, double conv_threshold = 0.001,
+        bool logging = false, const std::string& log_dir = "./logs/", int verbose_level = 1)
+        : network(net), logit_theta(theta), max_iterations(max_iter), convergence_threshold(conv_threshold),
+        enable_logging(logging), log_directory(log_dir), log_level(verbose_level) {
+
+        // Create log directory if it doesn't exist and logging is enabled
+        if (enable_logging) {
+            createLogDirectory();
+        }
+    }
 
     // Main assignment method
     bool assign() {
         // Initialize
         resetAssignment();
 
+        // Initial logs
+        if (enable_logging) {
+            logNetworkState("initial");
+        }
+
         for (int iter = 0; iter < max_iterations; iter++) {
-            // 1. Calculate link travel times based on current volumes
+
+            // 1. Update link volumes based on  route flows (initial route flow  at iteration 0)
+            updateLinkVolumes();
+
+            if (enable_logging && log_level >= 1) {
+                logLinkVolumes(iter);
+            }
+
+            // 2. Calculate link travel times based on current volumes
             updateLinkTravelTimes();
 
-            // 2. Calculate route costs
+            if (enable_logging && log_level >= 2) {
+                logLinkTravelTimes(iter);
+            }
+
+            // 3. Calculate route costs
             updateRouteCosts();
 
-            // 3. Calculate route flows using logit model
+
+            logRouteCosts(iter);
+
+            if (enable_logging && log_level >= 2) {
+                logRouteCosts(iter);
+            }
+
+            // 4. Calculate route flows using logit model
             std::vector<double> old_flows = getRouteFlows();
             updateRouteFlows();
 
-            // 4. Update link volumes based on route flows
-            updateLinkVolumes();
+            if (enable_logging && log_level >= 1) {
+                logRouteFlows(iter);
+                logODFlows(iter);
+            }
+
+ 
 
             // 5. Check convergence
             double gap = calculateGap(old_flows);
             std::cout << "Iteration " << iter << ", Gap: " << gap << std::endl;
 
+            if (enable_logging) {
+                logIterationSummary(iter, gap);
+            }
+
             if (gap < convergence_threshold) {
                 std::cout << "Converged after " << iter + 1 << " iterations." << std::endl;
+
+                // Final logs
+                if (enable_logging) {
+                    logNetworkState("final");
+                    logSummaryReport(iter + 1);
+                }
+
                 return true;
             }
         }
 
         std::cout << "Maximum iterations reached without convergence." << std::endl;
+
+        // Final logs even without convergence
+        if (enable_logging) {
+            logNetworkState("final_no_convergence");
+            logSummaryReport(max_iterations);
+        }
+
         return false;
     }
 
+    // Enable or disable logging
+    void setLogging(bool enable, const std::string& log_dir = "", int verbose_level = -1) {
+        enable_logging = enable;
+
+        if (!log_dir.empty()) {
+            log_directory = log_dir;
+        }
+
+        if (verbose_level >= 0) {
+            log_level = verbose_level;
+        }
+
+        if (enable_logging) {
+            createLogDirectory();
+        }
+    }
+
+    // Rest of your existing methods...
     // Reset assignment to initial state
     void resetAssignment() {
         // Reset link volumes
@@ -748,7 +1071,6 @@ public:
 
         // Reset route flows and costs
         for (auto& route : network.routes) {
-            route.flow = 0.0;
             route.cost = 0.0;
         }
     }
@@ -812,12 +1134,16 @@ public:
         }
     }
 
-    // Get current route flows
+
+// Get current route flows
     std::vector<double> getRouteFlows() {
         std::vector<double> flows;
-        for (const auto& route : network.routes) {
-            flows.push_back(route.flow);
+        flows.reserve(network.routes.size()); // Pre-allocate for efficiency
+
+        for (size_t i = 0; i < network.routes.size(); i++) {
+            flows.push_back(network.routes[i].flow);
         }
+
         return flows;
     }
 
@@ -828,6 +1154,11 @@ public:
 
         for (size_t i = 0; i < old_flows.size(); i++) {
             gap += std::abs(network.routes[i].flow - old_flows[i]);
+
+            if (gap > 1000)
+            {
+                int idebug = 1; 
+            }
             total_flow += network.routes[i].flow;
         }
 
@@ -870,8 +1201,498 @@ public:
         return result;
     }
 
-};
+private:
+    // Logging methods
 
+    // Create log directory if it doesn't exist
+    void createLogDirectory() {
+        // This is a simple implementation; you might need to enhance it based on your system
+        // For Windows: system(("mkdir " + log_directory).c_str());
+        // For Linux/Mac: system(("mkdir -p " + log_directory).c_str());
+
+        // For cross-platform approach, you'd typically use filesystem library (C++17)
+        // or a third-party library
+    }
+
+    // Get current timestamp as string
+    std::string getTimestamp() {
+        std::time_t now = std::time(nullptr);
+        std::tm localTime;
+
+        // Use localtime_s (safer version)
+        localtime_s(&localTime, &now);
+
+        std::ostringstream oss;
+        oss << std::put_time(&localTime, "%Y%m%d_%H%M%S");
+        return oss.str();
+    }
+
+    // Log network state (initial or final)
+    void logNetworkState(const std::string& state) {
+        std::string filename = log_directory + "network_state_" + state + "_" + getTimestamp() + ".csv";
+        std::ofstream file(filename);
+
+        if (!file.is_open()) {
+            std::cerr << "Error: Could not open log file " << filename << std::endl;
+            return;
+        }
+
+        // Log settings
+        file << "# NetFlow Traffic Assignment System\n";
+        file << "# State: " << state << "\n";
+        file << "# Time: " << getTimestamp() << "\n";
+        file << "# Settings:\n";
+        file << "# - Logit theta: " << logit_theta << "\n";
+        file << "# - Max iterations: " << max_iterations << "\n";
+        file << "# - Convergence threshold: " << convergence_threshold << "\n";
+        file << "# - Number of nodes: " << network.num_nodes << "\n";
+        file << "# - Number of links: " << network.num_links << "\n";
+        file << "# - Number of zones: " << network.num_zones << "\n";
+        file << "# - Number of modes: " << network.num_modes << "\n";
+        file << "# - Number of routes: " << network.routes.size() << "\n";
+        file << "# - Number of OD pairs: " << network.od_pairs.size() << "\n\n";
+
+        // Node section
+        file << "[Nodes]\n";
+        file << "node_id,zone_id,x_coord,y_coord\n";
+        for (const auto& pair : network.nodes) {
+            const Node& node = pair.second;
+            file << node.node_id << "," << node.zone_id << "," << node.x_coord << "," << node.y_coord << "\n";
+        }
+        file << "\n";
+
+        // Link section
+        file << "[Links]\n";
+        file << "link_id,from_node_id,to_node_id,free_flow_time,lanes,capacity,vdf_alpha,vdf_beta,volume,current_time\n";
+        for (const auto& pair : network.links) {
+            const Link& link = pair.second;
+            file << link.link_id << "," << link.from_node_id << "," << link.to_node_id << ","
+                << link.free_flow_time << "," << link.lanes << "," << link.capacity << ","
+                << link.vdf_alpha << "," << link.vdf_beta << "," << link.volume << "," << link.current_time << "\n";
+        }
+        file << "\n";
+
+        // Route section
+        file << "[Routes]\n";
+        file << "mode,origin_zone,dest_zone,route_id,flow,cost,link_sequence\n";
+        for (const auto& route : network.routes) {
+            file << route.mode << "," << route.origin_zone << "," << route.dest_zone << ","
+                << route.route_id << "," << route.flow << "," << route.cost << ",";
+
+            // Link sequence
+            for (size_t i = 0; i < route.link_ids.size(); i++) {
+                file << route.link_ids[i];
+                if (i < route.link_ids.size() - 1) {
+                    file << ";";
+                }
+            }
+            file << "\n";
+        }
+        file << "\n";
+
+        // OD pairs section
+        file << "[OD_Pairs]\n";
+        file << "mode,origin,destination,demand\n";
+        for (const auto& od : network.od_pairs) {
+            file << od.mode << "," << od.origin << "," << od.destination << "," << od.demand << "\n";
+        }
+
+        file.close();
+    }
+
+    // Log link travel times for current iteration
+    void logLinkTravelTimes(int iteration) {
+        std::string filename = log_directory + "link_travel_times_iter" + std::to_string(iteration) + ".csv";
+        std::ofstream file(filename);
+
+        if (!file.is_open()) {
+            std::cerr << "Error: Could not open log file " << filename << std::endl;
+            return;
+        }
+
+        file << "link_id,from_node_id,to_node_id,free_flow_time,current_time,ratio\n";
+        for (const auto& pair : network.links) {
+            const Link& link = pair.second;
+            double ratio = link.current_time / link.free_flow_time;
+            file << link.link_id << "," << link.from_node_id << "," << link.to_node_id << ","
+                << link.free_flow_time << "," << link.current_time << "," << ratio << "\n";
+        }
+
+        file.close();
+    }
+
+    // Log link volumes for current iteration
+    void logLinkVolumes(int iteration) {
+        std::string filename = log_directory + "link_volumes_iter" + std::to_string(iteration) + ".csv";
+        std::ofstream file(filename);
+
+        if (!file.is_open()) {
+            std::cerr << "Error: Could not open log file " << filename << std::endl;
+            return;
+        }
+
+        file << "link_id,from_node_id,to_node_id,capacity,volume,vc_ratio\n";
+        for (const auto& pair : network.links) {
+            const Link& link = pair.second;
+            double vc_ratio = link.volume / (link.capacity * link.lanes);
+            file << link.link_id << "," << link.from_node_id << "," << link.to_node_id << ","
+                << (link.capacity * link.lanes) << "," << link.volume << "," << vc_ratio << "\n";
+        }
+
+        file.close();
+    }
+
+    // Log route costs for current iteration
+    void logRouteCosts(int iteration) {
+        std::string filename = log_directory + "route_costs_iter" + std::to_string(iteration) + ".csv";
+        std::ofstream file(filename);
+
+        if (!file.is_open()) {
+            std::cerr << "Error: Could not open log file " << filename << std::endl;
+            return;
+        }
+
+        file << "mode,origin_zone,dest_zone,route_id,flow,cost,flow_to_cost_ratio\n";
+
+        // First, sort routes by flow (volume) for easy identification of major routes
+        std::vector<std::pair<int, double>> sorted_routes;
+        for (size_t i = 0; i < network.routes.size(); i++) {
+            sorted_routes.push_back(std::make_pair(i, network.routes[i].flow));
+        }
+
+        //// Sort in descending order of flow
+        //std::sort(sorted_routes.begin(), sorted_routes.end(),
+        //    [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
+        //        return a.second > b.second;
+        //    });
+
+        // Counter for routes reported
+        int count = 0;
+
+        // Log major routes (flow > 100) and at least the first 5 routes
+        for (const auto& pair : sorted_routes) {
+            int route_index = pair.first;
+            const Route& route = network.routes[route_index];
+
+            // Log if it's a major route (flow > 100) or one of the first 5 routes
+            if (route.flow > 100 || count < 10) {
+                double flow_to_cost_ratio = (route.cost > 0) ? route.flow / route.cost : 0;
+
+                file << route.mode << ","
+                    << route.origin_zone << ","
+                    << route.dest_zone << ","
+                    << route.route_id << ","
+                    << route.flow << ","
+                    << route.cost << ","
+                    << flow_to_cost_ratio << "\n";
+
+                count++;
+            }
+        }
+
+        // Add a summary line at the end
+        file << "# Summary: Logged " << count << " routes out of " << network.routes.size()
+            << " total routes, focusing on major routes (flow > 100) and top 5 routes by flow\n";
+
+        file.close();
+
+        std::cout << "Logged " << count << " major routes for iteration " << iteration << std::endl;
+    }
+
+    // Log route flows for current iteration
+    void logRouteFlows(int iteration) {
+        std::string filename = log_directory + "route_flows_iter" + std::to_string(iteration) + ".csv";
+        std::ofstream file(filename);
+
+        if (!file.is_open()) {
+            std::cerr << "Error: Could not open log file " << filename << std::endl;
+            return;
+        }
+
+        file << "mode,origin_zone,dest_zone,route_id,flow,cost,percent_of_od_demand\n";
+
+        // First, sort routes by flow for easy identification of major routes
+        std::vector<std::pair<int, double>> sorted_routes;
+        for (size_t i = 0; i < network.routes.size(); i++) {
+            sorted_routes.push_back(std::make_pair(i, network.routes[i].flow));
+        }
+
+        // Sort in descending order of flow
+        std::sort(sorted_routes.begin(), sorted_routes.end(),
+            [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
+                return a.second > b.second;
+            });
+
+        // Counter for routes reported
+        int count = 0;
+
+        // Log major routes (flow > 100) and at least the first 5 routes
+        for (const auto& pair : sorted_routes) {
+            int route_index = pair.first;
+            const Route& route = network.routes[route_index];
+
+            // Find corresponding OD pair to calculate percentage
+            double od_demand = 0.0;
+            for (const auto& od : network.od_pairs) {
+                if (od.mode == route.mode && od.origin == route.origin_zone && od.destination == route.dest_zone) {
+                    od_demand = od.demand;
+                    break;
+                }
+            }
+
+            double percentage = (od_demand > 0) ? (route.flow / od_demand) * 100.0 : 0.0;
+
+            // Log if it's a major route (flow > 100) or one of the first 5 routes
+            if (route.flow > 100 || count < 5) {
+                file << route.mode << ","
+                    << route.origin_zone << ","
+                    << route.dest_zone << ","
+                    << route.route_id << ","
+                    << route.flow << ","
+                    << route.cost << ","
+                    << percentage << "\n";
+
+                count++;
+            }
+        }
+
+        // Add a summary line at the end
+        file << "# Summary: Logged " << count << " routes out of " << network.routes.size()
+            << " total routes, focusing on major routes (flow > 100) and top 5 routes by flow\n";
+
+        file.close();
+
+        std::cout << "Logged " << count << " major route flows for iteration " << iteration << std::endl;
+    }
+
+    // Log OD flows (aggregated route flows) for current iteration
+    void logODFlows(int iteration) {
+        std::string filename = log_directory + "od_flows_iter" + std::to_string(iteration) + ".csv";
+        std::ofstream file(filename);
+
+        if (!file.is_open()) {
+            std::cerr << "Error: Could not open log file " << filename << std::endl;
+            return;
+        }
+
+        file << "mode,origin,destination,demand,assigned_flow,percent_assigned,num_routes,min_route_cost,max_route_cost\n";
+
+        // Create a vector of OD pairs with their total flow for sorting
+        std::vector<std::tuple<int, double, double>> od_with_flows; // index, demand, flow
+
+        for (size_t i = 0; i < network.od_pairs.size(); i++) {
+            const ODPair& od = network.od_pairs[i];
+            double total_flow = 0.0;
+            for (int route_idx : od.route_indices) {
+                total_flow += network.routes[route_idx].flow;
+            }
+            od_with_flows.push_back(std::make_tuple(i, od.demand, total_flow));
+        }
+
+        // Sort by flow in descending order
+        std::sort(od_with_flows.begin(), od_with_flows.end(),
+            [](const auto& a, const auto& b) {
+                return std::get<2>(a) > std::get<2>(b);
+            });
+
+        // Counter for OD pairs reported
+        int count = 0;
+
+        // Log major OD pairs (flow > 100) and at least the first 5 OD pairs
+        for (const auto& tuple : od_with_flows) {
+            int od_index = std::get<0>(tuple);
+            double demand = std::get<1>(tuple);
+            double total_flow = std::get<2>(tuple);
+
+            const ODPair& od = network.od_pairs[od_index];
+
+            // Calculate percentage assigned
+            double percent_assigned = (demand > 0) ? (total_flow / demand) * 100.0 : 0.0;
+
+            // Find min and max route costs for this OD pair
+            double min_cost = std::numeric_limits<double>::max();
+            double max_cost = 0.0;
+
+            for (int route_idx : od.route_indices) {
+                double cost = network.routes[route_idx].cost;
+                min_cost = std::min(min_cost, cost);
+                max_cost = std::max(max_cost, cost);
+            }
+
+            if (od.route_indices.empty()) {
+                min_cost = 0.0; // No routes
+            }
+
+            // Log if it's a major OD pair (flow > 100) or one of the first 5 OD pairs
+            if (total_flow > 100 || count < 5) {
+                file << od.mode << ","
+                    << od.origin << ","
+                    << od.destination << ","
+                    << demand << ","
+                    << total_flow << ","
+                    << percent_assigned << ","
+                    << od.route_indices.size() << ","
+                    << min_cost << ","
+                    << max_cost << "\n";
+
+                count++;
+            }
+        }
+
+        // Add a summary line
+        file << "# Summary: Logged " << count << " OD pairs out of " << network.od_pairs.size()
+            << " total OD pairs, focusing on major OD pairs (flow > 100) and top 5 OD pairs by flow\n";
+
+        file.close();
+
+        std::cout << "Logged " << count << " major OD flows for iteration " << iteration << std::endl;
+    }
+
+    // Log iteration summary
+    void logIterationSummary(int iteration, double gap) {
+        std::string filename = log_directory + "iteration_summary.csv";
+        bool file_exists = std::ifstream(filename).good();
+
+        std::ofstream file(filename, std::ios::app);
+
+        if (!file.is_open()) {
+            std::cerr << "Error: Could not open log file " << filename << std::endl;
+            return;
+        }
+
+        // Write header if file is new
+        if (!file_exists) {
+            file << "iteration,gap,total_vht,total_vkt,max_vc_ratio,avg_vc_ratio\n";
+        }
+
+        // Calculate metrics
+        double total_vht = 0.0; // Vehicle Hours Traveled
+        double total_vkt = 0.0; // Vehicle Kilometers Traveled
+        double max_vc_ratio = 0.0;
+        double sum_vc_ratio = 0.0;
+        int count_links = 0;
+
+        for (const auto& pair : network.links) {
+            const Link& link = pair.second;
+            total_vht += link.volume * link.current_time; // Assuming time unit is hours
+            // For VKT, you would need link length - add if available
+            // total_vkt += link.volume * link.length;
+
+            double vc_ratio = link.volume / (link.capacity * link.lanes);
+            max_vc_ratio = std::max(max_vc_ratio, vc_ratio);
+            sum_vc_ratio += vc_ratio;
+            count_links++;
+        }
+
+        double avg_vc_ratio = count_links > 0 ? sum_vc_ratio / count_links : 0.0;
+
+        file << iteration << "," << gap << "," << total_vht << "," << total_vkt << ","
+            << max_vc_ratio << "," << avg_vc_ratio << "\n";
+
+        file.close();
+    }
+
+    // Log comprehensive summary report at the end
+    void logSummaryReport(int total_iterations) {
+        std::string filename = log_directory + "summary_report_" + getTimestamp() + ".txt";
+        std::ofstream file(filename);
+
+        if (!file.is_open()) {
+            std::cerr << "Error: Could not open log file " << filename << std::endl;
+            return;
+        }
+
+        file << "NetFlow Traffic Assignment Summary Report\n";
+        file << "=========================================\n\n";
+
+        file << "Run Information:\n";
+        file << "  Time: " << getTimestamp() << "\n";
+        file << "  Total Iterations: " << total_iterations << "\n";
+        file << "  Convergence Threshold: " << convergence_threshold << "\n";
+        file << "  Logit Theta: " << logit_theta << "\n\n";
+
+        file << "Network Statistics:\n";
+        file << "  Number of Nodes: " << network.num_nodes << "\n";
+        file << "  Number of Links: " << network.num_links << "\n";
+        file << "  Number of Zones: " << network.num_zones << "\n";
+        file << "  Number of Modes: " << network.num_modes << "\n";
+        file << "  Number of Routes: " << network.routes.size() << "\n";
+        file << "  Number of OD Pairs: " << network.od_pairs.size() << "\n\n";
+
+        // Calculate summary statistics
+        double total_demand = 0.0;
+        double total_assigned = 0.0;
+        for (const auto& od : network.od_pairs) {
+            total_demand += od.demand;
+            double od_flow = 0.0;
+            for (int route_idx : od.route_indices) {
+                od_flow += network.routes[route_idx].flow;
+            }
+            total_assigned += od_flow;
+        }
+
+        double total_vht = 0.0;
+        double total_vkt = 0.0;
+        double max_vc_ratio = 0.0;
+        int congested_links = 0;
+
+        for (const auto& pair : network.links) {
+            const Link& link = pair.second;
+            total_vht += link.volume * link.current_time;
+            // total_vkt += link.volume * link.length; // Add if length is available
+
+            double vc_ratio = link.volume / (link.capacity * link.lanes);
+            max_vc_ratio = std::max(max_vc_ratio, vc_ratio);
+
+            if (vc_ratio > 0.9) {
+                congested_links++;
+            }
+        }
+
+        file << "Assignment Results:\n";
+        file << "  Total Demand: " << total_demand << "\n";
+        file << "  Total Assigned Flow: " << total_assigned << "\n";
+        file << "  Total VHT: " << total_vht << "\n";
+        if (total_vkt > 0) {
+            file << "  Total VKT: " << total_vkt << "\n";
+        }
+        file << "  Maximum V/C Ratio: " << max_vc_ratio << "\n";
+        file << "  Number of Congested Links (V/C > 0.9): " << congested_links << "\n\n";
+
+        // Top congested links
+        file << "Top 10 Most Congested Links:\n";
+        file << "  Link ID, From Node, To Node, Volume, Capacity, V/C Ratio, Travel Time\n";
+
+        std::vector<std::pair<int, double>> link_congestion;
+        for (const auto& pair : network.links) {
+            const Link& link = pair.second;
+            double vc_ratio = link.volume / (link.capacity * link.lanes);
+            link_congestion.emplace_back(link.link_id, vc_ratio);
+        }
+
+        // Sort by V/C ratio in descending order
+        std::sort(link_congestion.begin(), link_congestion.end(),
+            [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
+                return a.second > b.second;
+            });
+
+        // Print top 10 or less if fewer links
+        int top_count = std::min(10, static_cast<int>(link_congestion.size()));
+        for (int i = 0; i < top_count; i++) {
+            int link_id = link_congestion[i].first;
+            const Link& link = network.links.at(link_id);
+            double vc_ratio = link.volume / (link.capacity * link.lanes);
+
+            file << "  " << link.link_id << ", " << link.from_node_id << ", " << link.to_node_id
+                << ", " << link.volume << ", " << (link.capacity * link.lanes) << ", "
+                << vc_ratio << ", " << link.current_time << "\n";
+        }
+
+        file << "\nNote: Detailed logs are available in the log directory.\n";
+
+        file.close();
+    }
+};
     // Example usage
     int main() {
         // Create network
@@ -890,7 +1711,7 @@ public:
         }
 
         // Create traffic assignment
-        TrafficAssignment assignment(network, 0.1);
+        TrafficAssignmentLog assignment(network, 0.1, 100, 0.001, true, "./logs/", 0);
 
         // Run assignment
         assignment.assign();
@@ -899,14 +1720,40 @@ public:
         auto link_volumes = assignment.getLinkVolumes();
         auto route_costs = assignment.getRouteCosts();
 
-        std::cout << "Link Volumes:" << std::endl;
-        for (const auto& pair : link_volumes) {
-            int link_id = pair.first;
-            double volume = pair.second;
-            std::cout << "Link " << link_id << ": " << volume << std::endl;
+        // Calculate system-wide metrics
+        double total_vmt = 0.0;  // Vehicle Miles Traveled (or distance units)
+        double total_vht = 0.0;  // Vehicle Hours Traveled
+        double total_volume = 0.0;
+
+        // Calculate link-based metrics
+        for (const auto& link_pair : network.links) {
+            const Link& link = link_pair.second;
+            // Assuming you have link.length available. If not, you can approximate or omit VMT
+            // double link_vmt = link.volume * link.length;
+            // total_vmt += link_vmt;
+
+            // Calculate VHT
+            double link_vht = link.volume * link.current_time;
+            total_vht += link_vht;
+
+            // Accumulate volume
+            total_volume += link.volume;
         }
 
-        std::cout << "Route Costs:" << std::endl;
+        // Calculate average travel time (hours)
+        double avg_travel_time = (total_volume > 0) ? total_vht / total_volume : 0.0;
+
+        // Print system-wide metrics
+        std::cout << "\nSystem-wide Metrics:" << std::endl;
+        std::cout << "------------------------------------------------------" << std::endl;
+        // std::cout << "Total Vehicle Miles Traveled (VMT): " << total_vmt << std::endl;
+        std::cout << "Total Vehicle Hours Traveled (VHT): " << total_vht << std::endl;
+        std::cout << "Total Volume: " << total_volume << " vehicles" << std::endl;
+        std::cout << "Average Travel Time: " << (avg_travel_time * 60) << " minutes" << std::endl;
+        std::cout << "------------------------------------------------------" << std::endl;
+
+        // Sort routes by volume for better output
+        std::vector<std::tuple<int, int, int, int, double, double>> sorted_routes;
         for (const auto& tuple : route_costs) {
             int mode = std::get<0>(tuple);
             int origin = std::get<1>(tuple);
@@ -914,9 +1761,60 @@ public:
             int route_id = std::get<3>(tuple);
             double cost = std::get<4>(tuple);
 
-            std::cout << "Mode " << mode << ", O " << origin << ", D " << dest
-                << ", Route " << route_id << ": " << cost << std::endl;
+            // Find the corresponding route to get its volume
+            double volume = 0.0;
+            for (const auto& route : network.routes) {
+                if (route.mode == mode && route.origin_zone == origin &&
+                    route.dest_zone == dest && route.route_id == route_id) {
+                    volume = route.flow;
+                    break;
+                }
+            }
+
+            sorted_routes.push_back(std::make_tuple(mode, origin, dest, route_id, cost, volume));
         }
+
+        // Sort by volume in descending order
+        std::sort(sorted_routes.begin(), sorted_routes.end(),
+            [](const auto& a, const auto& b) {
+                return std::get<5>(a) > std::get<5>(b);
+            });
+
+        // Print top routes by volume
+        std::cout << "\nTop Routes by Volume:" << std::endl;
+        std::cout << "------------------------------------------------------" << std::endl;
+        std::cout << "Mode | Origin | Dest | Route ID | Volume | Cost (min)" << std::endl;
+        std::cout << "------------------------------------------------------" << std::endl;
+
+        // Print at most 10 routes
+        int count = 0;
+        for (const auto& tuple : sorted_routes) {
+            if (count >= 10) break;
+
+            int mode = std::get<0>(tuple);
+            int origin = std::get<1>(tuple);
+            int dest = std::get<2>(tuple);
+            int route_id = std::get<3>(tuple);
+            double cost = std::get<4>(tuple);
+            double volume = std::get<5>(tuple);
+
+            // Only print routes with volume > 0
+            if (volume > 0) {
+                std::cout << std::setw(4) << mode << " | "
+                    << std::setw(6) << origin << " | "
+                    << std::setw(4) << dest << " | "
+                    << std::setw(8) << route_id << " | "
+                    << std::setw(6) << std::fixed << std::setprecision(1) << volume << " | "
+                    << std::setw(9) << std::fixed << std::setprecision(2) << cost << std::endl;
+                count++;
+            }
+        }
+
+        if (count == 0) {
+            std::cout << "No routes with positive volume found." << std::endl;
+        }
+
+        std::cout << "------------------------------------------------------" << std::endl;
 
         // Export results
       //  exportNetworkToJSON(network, "network_results.json");
