@@ -6,4 +6,4 @@ project(FlowThroughTensors LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_BUILD_TYPE Release)
 
-add_executable(${PROJECT_NAME} src/NetFlow/FlowThroughTensors.cpp)
+add_executable(${PROJECT_NAME} src/FlowThroughTensors.cpp)
