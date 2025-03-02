@@ -1,18 +1,18 @@
-#include <iostream>
-#include <fstream>
-#include <vector>
-#include <unordered_map>
-#include <map>
-#include <string>
-#include <cmath>
-#include <algorithm>
-#include <memory>
-#include <sstream>
 #include "Json.hpp"
 
-#include <iomanip>
-#include <sstream>
+#include <algorithm>
+#include <cmath>
 #include <ctime>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
+#include <map>
+#include <memory>
+#include <sstream>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
 using json = nlohmann::json;
 
 // CSV Parser from the provided code
@@ -29,10 +29,7 @@ public:
     std::vector<std::string> Headers;
     std::map<std::string, int> FieldsIndices;
 
-    CDTACSVParser()
-        : Delimiter{ ',' }
-    {
-    }
+    CDTACSVParser() : Delimiter{','} {}
 
     ~CDTACSVParser()
     {
@@ -40,54 +37,48 @@ public:
             inFile.close();
     }
 
+    // inline member functions
+    std::vector<std::string> GetHeaderVector() { return Headers; }
+    void CloseCSVFile() { inFile.close(); }
 
-
-
-
-// inline member functions
-std::vector<std::string> GetHeaderVector() { return Headers; }
-void CloseCSVFile() { inFile.close(); }
-
-int ParserIntSequence(std::string str, std::vector<int>& vect)
-{
-
-    std::stringstream ss(str);
-
-    int i;
-
-    while (ss >> i)
+    int ParserIntSequence(std::string str, std::vector<int>& vect)
     {
-        vect.push_back(i);
+        std::stringstream ss(str);
 
-        if (ss.peek() == ';')
-            ss.ignore();
+        int i;
+
+        while (ss >> i)
+        {
+            vect.push_back(i);
+
+            if (ss.peek() == ';')
+                ss.ignore();
+        }
+
+        return vect.size();
     }
 
-    return vect.size();
-}
-
-
-// definitions of CDTACSVParser member functions
-void ConvertLineStringValueToIntegers()
-{
-    LineIntegerVector.clear();
-    for (unsigned i = 0; i < LineFieldsValue.size(); ++i)
+    // definitions of CDTACSVParser member functions
+    void ConvertLineStringValueToIntegers()
     {
-        std::string si = LineFieldsValue[i];
-        int value = atoi(si.c_str());
+        LineIntegerVector.clear();
+        for (unsigned i = 0; i < LineFieldsValue.size(); ++i)
+        {
+            std::string si = LineFieldsValue[i];
+            int value = atoi(si.c_str());
 
-        if (value >= 1)
-            LineIntegerVector.push_back(value);
+            if (value >= 1)
+                LineIntegerVector.push_back(value);
+        }
     }
-}
 
-bool OpenCSVFile(std::string fileName, bool b_required)
-{
-    mFileName = fileName;
-    inFile.open(fileName.c_str());
-
-    if (inFile.is_open())
+    bool OpenCSVFile(std::string fileName, bool b_required)
     {
+        mFileName = fileName;
+        inFile.open(fileName.c_str());
+
+        if (inFile.is_open())
+        {
             std::string s;
             std::getline(inFile, s);
             std::vector<std::string> FieldNames = ParseLine(s);
@@ -110,219 +101,215 @@ bool OpenCSVFile(std::string fileName, bool b_required)
                 FieldsIndices[name] = (int)i;
             }
 
-        return true;
-    }
-    else
-    {
-        if (b_required)
-        {
-            std::cerr << "Error: Could not open file " << fileName << std::endl;
-        }
-        return false;
-    }
-}
-
-bool ReadRecord()
-{
-    LineFieldsValue.clear();
-
-    if (inFile.is_open())
-    {
-        std::string s;
-        std::getline(inFile, s);
-        if (s.length() > 0)
-        {
-            LineFieldsValue = ParseLine(s);
             return true;
+        }
+        else
+        {
+            if (b_required)
+            {
+                std::cerr << "Error: Could not open file " << fileName << std::endl;
+            }
+            return false;
+        }
+    }
+
+    bool ReadRecord()
+    {
+        LineFieldsValue.clear();
+
+        if (inFile.is_open())
+        {
+            std::string s;
+            std::getline(inFile, s);
+            if (s.length() > 0)
+            {
+                LineFieldsValue = ParseLine(s);
+                return true;
+            }
+            else
+            {
+                return false;
+            }
         }
         else
         {
             return false;
         }
     }
-    else
+
+    std::vector<std::string> ParseLine(std::string line)
     {
-        return false;
-    }
-}
+        std::vector<std::string> SeperatedStrings;
+        std::string subStr;
 
+        if (line.length() == 0)
+            return SeperatedStrings;
 
+        std::istringstream ss(line);
 
-std::vector<std::string> ParseLine(std::string line)
-{
-    std::vector<std::string> SeperatedStrings;
-    std::string subStr;
+        if (line.find_first_of('"') == std::string::npos)
+        {
+            while (std::getline(ss, subStr, Delimiter))
+            {
+                SeperatedStrings.push_back(subStr);
+            }
 
-    if (line.length() == 0)
+            if (line.at(line.length() - 1) == ',')
+            {
+                SeperatedStrings.push_back("");
+            }
+        }
+        else
+        {
+            while (line.length() > 0)
+            {
+                size_t n1 = line.find_first_of(',');
+                size_t n2 = line.find_first_of('"');
+
+                if (n1 == std::string::npos &&
+                    n2 == std::string::npos)  // last field without double quotes
+                {
+                    subStr = line;
+                    SeperatedStrings.push_back(subStr);
+                    break;
+                }
+
+                if (n1 == std::string::npos && n2 != std::string::npos)  // last field with double
+                                                                         // quotes
+                {
+                    size_t n3 = line.find_first_of('"', n2 + 1);  // second double quote
+
+                    // extract content from double quotes
+                    subStr = line.substr(n2 + 1, n3 - n2 - 1);
+                    SeperatedStrings.push_back(subStr);
+
+                    break;
+                }
+
+                if (n1 != std::string::npos && (n1 < n2 || n2 == std::string::npos))
+                {
+                    subStr = line.substr(0, n1);
+                    SeperatedStrings.push_back(subStr);
+                    if (n1 < line.length() - 1)
+                    {
+                        line = line.substr(n1 + 1);
+                    }
+                    else  // comma is the last char in the line string, push an empty string to the
+                          // back of vector
+                    {
+                        SeperatedStrings.push_back("");
+                        break;
+                    }
+                }
+
+                if (n1 != std::string::npos && n2 != std::string::npos && n2 < n1)
+                {
+                    size_t n3 = line.find_first_of('"', n2 + 1);  // second double quote
+                    subStr = line.substr(n2 + 1, n3 - n2 - 1);
+                    SeperatedStrings.push_back(subStr);
+                    size_t idx = line.find_first_of(',', n3 + 1);
+
+                    if (idx != std::string::npos)
+                    {
+                        line = line.substr(idx + 1);
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+            }
+        }
         return SeperatedStrings;
-
-    std::istringstream ss(line);
-
-    if (line.find_first_of('"') == std::string::npos)
-    {
-        while (std::getline(ss, subStr, Delimiter))
-        {
-            SeperatedStrings.push_back(subStr);
-        }
-
-        if (line.at(line.length() - 1) == ',')
-        {
-            SeperatedStrings.push_back("");
-        }
     }
-    else
-    {
-        while (line.length() > 0)
-        {
-            size_t n1 = line.find_first_of(',');
-            size_t n2 = line.find_first_of('"');
 
-            if (n1 == std::string::npos &&
-                n2 == std::string::npos)  // last field without double quotes
+    bool GetStringValueByFieldName(std::string field_name, std::string& value, bool required_field)
+    {
+        if (FieldsIndices.find(field_name) == FieldsIndices.end())
+        {
+            if (required_field)
             {
-                subStr = line;
-                SeperatedStrings.push_back(subStr);
-                break;
+                std::cerr << "[ERROR] Field " << field_name << " in file " << mFileName
+                          << " does not exist. Please check the file." << std::endl;
+            }
+            return false;
+        }
+        else
+        {
+            if (LineFieldsValue.size() == 0)
+            {
+                return false;
             }
 
-            if (n1 == std::string::npos && n2 != std::string::npos)  // last field with double
-                // quotes
+            unsigned int index = FieldsIndices[field_name];
+            if (index >= LineFieldsValue.size())
             {
-                size_t n3 = line.find_first_of('"', n2 + 1);  // second double quote
+                return false;
+            }
+            std::string str_value = LineFieldsValue[index];
 
-                // extract content from double quotes
-                subStr = line.substr(n2 + 1, n3 - n2 - 1);
-                SeperatedStrings.push_back(subStr);
-
-                break;
+            if (str_value.length() <= 0)
+            {
+                return false;
             }
 
-            if (n1 != std::string::npos && (n1 < n2 || n2 == std::string::npos))
+            value = str_value;
+            return true;
+        }
+    }
+
+    template <class T>
+    bool GetValueByFieldName(std::string field_name, T& value, bool required_field)
+    {
+        if (FieldsIndices.find(field_name) == FieldsIndices.end())
+        {
+            if (required_field)
             {
-                subStr = line.substr(0, n1);
-                SeperatedStrings.push_back(subStr);
-                if (n1 < line.length() - 1)
-                {
-                    line = line.substr(n1 + 1);
-                }
-                else  // comma is the last char in the line string, push an empty string to the back
-                      // of vector
-                {
-                    SeperatedStrings.push_back("");
-                    break;
-                }
+                std::cerr << "[ERROR] Field " << field_name << " in file " << mFileName.c_str()
+                          << " does not exist. Please check the file." << std::endl;
+            }
+            return false;
+        }
+        else
+        {
+            if (LineFieldsValue.size() == 0)
+            {
+                return false;
             }
 
-            if (n1 != std::string::npos && n2 != std::string::npos && n2 < n1)
+            int size = (int)(LineFieldsValue.size());
+            if (FieldsIndices[field_name] >= size)
             {
-                size_t n3 = line.find_first_of('"', n2 + 1);  // second double quote
-                subStr = line.substr(n2 + 1, n3 - n2 - 1);
-                SeperatedStrings.push_back(subStr);
-                size_t idx = line.find_first_of(',', n3 + 1);
-
-                if (idx != std::string::npos)
-                {
-                    line = line.substr(idx + 1);
-                }
-                else
-                {
-                    break;
-                }
+                return false;
             }
+
+            std::string str_value = LineFieldsValue[FieldsIndices[field_name]];
+
+            if (str_value.length() <= 0)
+            {
+                return false;
+            }
+
+            std::istringstream ss(str_value);
+
+            T converted_value;
+            ss >> converted_value;
+
+            if (ss.fail())
+            {
+                return false;
+            }
+
+            if (required_field)
+            {
+                //          if (converted_value < 0)
+                //              converted_value = 0;
+            }
+
+            value = converted_value;
+            return true;
         }
     }
-    return SeperatedStrings;
-}
-
-bool GetStringValueByFieldName(std::string field_name,
-    std::string& value,
-    bool required_field)
-{
-    if (FieldsIndices.find(field_name) == FieldsIndices.end())
-    {
-        if (required_field)
-        {
-            std::cerr << "[ERROR] Field " << field_name << " in file " << mFileName << " does not exist. Please check the file." << std::endl;
-        }
-        return false;
-    }
-    else
-    {
-        if (LineFieldsValue.size() == 0)
-        {
-            return false;
-        }
-
-        unsigned int index = FieldsIndices[field_name];
-        if (index >= LineFieldsValue.size())
-        {
-            return false;
-        }
-        std::string str_value = LineFieldsValue[index];
-
-        if (str_value.length() <= 0)
-        {
-            return false;
-        }
-
-        value = str_value;
-        return true;
-    }
-}
-
-template <class T>
-bool GetValueByFieldName(std::string field_name,
-    T& value,
-    bool required_field)
-{
-    if (FieldsIndices.find(field_name) == FieldsIndices.end())
-    {
-        if (required_field)
-        {
-            std::cerr << "[ERROR] Field " << field_name << " in file " << mFileName.c_str() << " does not exist. Please check the file." << std::endl;
-        }
-        return false;
-    }
-    else
-    {
-        if (LineFieldsValue.size() == 0)
-        {
-            return false;
-        }
-
-        int size = (int)(LineFieldsValue.size());
-        if (FieldsIndices[field_name] >= size)
-        {
-            return false;
-        }
-
-        std::string str_value = LineFieldsValue[FieldsIndices[field_name]];
-
-        if (str_value.length() <= 0)
-        {
-            return false;
-        }
-
-        std::istringstream ss(str_value);
-
-        T converted_value;
-        ss >> converted_value;
-
-        if (ss.fail())
-        {
-            return false;
-        }
-
-        if (required_field)
-        {
-  //          if (converted_value < 0)
-  //              converted_value = 0;
-        }
-
-        value = converted_value;
-        return true;
-    }
-}
 };
 
 // Forward declarations
@@ -685,7 +672,7 @@ private:
             }
 
 
-            
+
         }
 
         std::cout << "-----------------------------------------------------------------------" << std::endl;
@@ -1010,7 +997,7 @@ public:
                 logODFlows(iter);
             }
 
- 
+
 
             // 5. Check convergence
             double gap = calculateEquilibriumGap();
@@ -1287,7 +1274,7 @@ public:
 
             if (gap > 1000)
             {
-                int idebug = 1; 
+                int idebug = 1;
             }
             total_flow += network.routes[i].flow;
         }
@@ -1313,10 +1300,10 @@ public:
 
             // Calculate costs
             for (int route_idx : od.route_indices) {
-                // Current cost: flow × actual route cost
+                // Current cost: flow ï¿½ actual route cost
                 current_total_cost += network.routes[route_idx].flow * network.routes[route_idx].cost;
 
-                // Minimum cost: flow × minimum route cost (as if all flow used best route)
+                // Minimum cost: flow ï¿½ minimum route cost (as if all flow used best route)
                 minimum_total_cost += network.routes[route_idx].flow * min_route_cost;
             }
 
@@ -1394,7 +1381,11 @@ private:
         std::tm localTime;
 
         // Use localtime_s (safer version)
+#ifdef _WIN32
         localtime_s(&localTime, &now);
+#else
+        localtime_r(&now, &localTime);
+#endif
 
         std::ostringstream oss;
         oss << std::put_time(&localTime, "%Y%m%d_%H%M%S");
@@ -1867,131 +1858,132 @@ private:
         file.close();
     }
 };
-    // Example usage
-    int main() {
-        // Create network
-        Network network;
 
-        // Load network (choose one method)
-        // 1. Load from JSON
-       // bool loaded = network.loadFromJSON("network.json");
+// Example usage
+int main() {
+    // Create network
+    Network network;
 
-        // 2. Load from CSV files
-         bool loaded = network.loadFromCSV("node.csv", "link.csv", "route_assignment.csv");
+    // Load network (choose one method)
+    // 1. Load from JSON
+    // bool loaded = network.loadFromJSON("network.json");
 
-        if (!loaded) {
-            std::cerr << "Failed to load network." << std::endl;
-            return 1;
-        }
+    // 2. Load from CSV files
+        bool loaded = network.loadFromCSV("node.csv", "link.csv", "route_assignment.csv");
 
-        // Create traffic assignment
-        TrafficAssignmentLog assignment(network, 0.1, 100, 0.001, false, "./logs/", 0);
-
-        // Run assignment
-        assignment.assign();
-
-        // Output results
-        auto link_volumes = assignment.getLinkVolumes();
-        auto route_costs = assignment.getRouteCosts();
-
-        // Calculate system-wide metrics
-        double total_vmt = 0.0;  // Vehicle Miles Traveled (or distance units)
-        double total_vht = 0.0;  // Vehicle Hours Traveled
-        double total_volume = 0.0;
-
-        // Calculate link-based metrics
-        for (const auto& link_pair : network.links) {
-            const Link& link = link_pair.second;
-            // Assuming you have link.length available. If not, you can approximate or omit VMT
-            // double link_vmt = link.volume * link.length;
-            // total_vmt += link_vmt;
-
-            // Calculate VHT
-            double link_vht = link.volume * link.current_time;
-            total_vht += link_vht;
-
-            // Accumulate volume
-            total_volume += link.volume;
-        }
-
-        // Calculate average travel time (hours)
-        double avg_travel_time = (total_volume > 0) ? total_vht / total_volume : 0.0;
-
-        // Print system-wide metrics
-        std::cout << "\nSystem-wide Metrics:" << std::endl;
-        std::cout << "------------------------------------------------------" << std::endl;
-        // std::cout << "Total Vehicle Miles Traveled (VMT): " << total_vmt << std::endl;
-        std::cout << "Total Vehicle Hours Traveled (VHT): " << total_vht << std::endl;
-        std::cout << "Total Volume: " << total_volume << " vehicles" << std::endl;
-        std::cout << "Average Travel Time: " << (avg_travel_time * 60) << " minutes" << std::endl;
-        std::cout << "------------------------------------------------------" << std::endl;
-
-        // Sort routes by volume for better output
-        std::vector<std::tuple<int, int, int, int, double, double>> sorted_routes;
-        for (const auto& tuple : route_costs) {
-            int mode = std::get<0>(tuple);
-            int origin = std::get<1>(tuple);
-            int dest = std::get<2>(tuple);
-            int route_id = std::get<3>(tuple);
-            double cost = std::get<4>(tuple);
-
-            // Find the corresponding route to get its volume
-            double volume = 0.0;
-            for (const auto& route : network.routes) {
-                if (route.mode == mode && route.origin_zone == origin &&
-                    route.dest_zone == dest && route.route_id == route_id) {
-                    volume = route.flow;
-                    break;
-                }
-            }
-
-            sorted_routes.push_back(std::make_tuple(mode, origin, dest, route_id, cost, volume));
-        }
-
-        // Sort by volume in descending order
-        std::sort(sorted_routes.begin(), sorted_routes.end(),
-            [](const auto& a, const auto& b) {
-                return std::get<5>(a) > std::get<5>(b);
-            });
-
-        // Print top routes by volume
-        std::cout << "\nTop Routes by Volume:" << std::endl;
-        std::cout << "------------------------------------------------------" << std::endl;
-        std::cout << "Mode | Origin | Dest | Route ID | Volume | Cost (min)" << std::endl;
-        std::cout << "------------------------------------------------------" << std::endl;
-
-        // Print at most 10 routes
-        int count = 0;
-        for (const auto& tuple : sorted_routes) {
-            if (count >= 10) break;
-
-            int mode = std::get<0>(tuple);
-            int origin = std::get<1>(tuple);
-            int dest = std::get<2>(tuple);
-            int route_id = std::get<3>(tuple);
-            double cost = std::get<4>(tuple);
-            double volume = std::get<5>(tuple);
-
-            // Only print routes with volume > 0
-            if (volume > 0) {
-                std::cout << std::setw(4) << mode << " | "
-                    << std::setw(6) << origin << " | "
-                    << std::setw(4) << dest << " | "
-                    << std::setw(8) << route_id << " | "
-                    << std::setw(6) << std::fixed << std::setprecision(1) << volume << " | "
-                    << std::setw(9) << std::fixed << std::setprecision(2) << cost << std::endl;
-                count++;
-            }
-        }
-
-        if (count == 0) {
-            std::cout << "No routes with positive volume found." << std::endl;
-        }
-
-        std::cout << "------------------------------------------------------" << std::endl;
-
-        // Export results
-      //  exportNetworkToJSON(network, "network_results.json");
-
-        return 0;
+    if (!loaded) {
+        std::cerr << "Failed to load network." << std::endl;
+        return 1;
     }
+
+    // Create traffic assignment
+    TrafficAssignmentLog assignment(network, 0.1, 100, 0.001, false, "./logs/", 0);
+
+    // Run assignment
+    assignment.assign();
+
+    // Output results
+    auto link_volumes = assignment.getLinkVolumes();
+    auto route_costs = assignment.getRouteCosts();
+
+    // Calculate system-wide metrics
+    double total_vmt = 0.0;  // Vehicle Miles Traveled (or distance units)
+    double total_vht = 0.0;  // Vehicle Hours Traveled
+    double total_volume = 0.0;
+
+    // Calculate link-based metrics
+    for (const auto& link_pair : network.links) {
+        const Link& link = link_pair.second;
+        // Assuming you have link.length available. If not, you can approximate or omit VMT
+        // double link_vmt = link.volume * link.length;
+        // total_vmt += link_vmt;
+
+        // Calculate VHT
+        double link_vht = link.volume * link.current_time;
+        total_vht += link_vht;
+
+        // Accumulate volume
+        total_volume += link.volume;
+    }
+
+    // Calculate average travel time (hours)
+    double avg_travel_time = (total_volume > 0) ? total_vht / total_volume : 0.0;
+
+    // Print system-wide metrics
+    std::cout << "\nSystem-wide Metrics:" << std::endl;
+    std::cout << "------------------------------------------------------" << std::endl;
+    // std::cout << "Total Vehicle Miles Traveled (VMT): " << total_vmt << std::endl;
+    std::cout << "Total Vehicle Hours Traveled (VHT): " << total_vht << std::endl;
+    std::cout << "Total Volume: " << total_volume << " vehicles" << std::endl;
+    std::cout << "Average Travel Time: " << (avg_travel_time * 60) << " minutes" << std::endl;
+    std::cout << "------------------------------------------------------" << std::endl;
+
+    // Sort routes by volume for better output
+    std::vector<std::tuple<int, int, int, int, double, double>> sorted_routes;
+    for (const auto& tuple : route_costs) {
+        int mode = std::get<0>(tuple);
+        int origin = std::get<1>(tuple);
+        int dest = std::get<2>(tuple);
+        int route_id = std::get<3>(tuple);
+        double cost = std::get<4>(tuple);
+
+        // Find the corresponding route to get its volume
+        double volume = 0.0;
+        for (const auto& route : network.routes) {
+            if (route.mode == mode && route.origin_zone == origin &&
+                route.dest_zone == dest && route.route_id == route_id) {
+                volume = route.flow;
+                break;
+            }
+        }
+
+        sorted_routes.push_back(std::make_tuple(mode, origin, dest, route_id, cost, volume));
+    }
+
+    // Sort by volume in descending order
+    std::sort(sorted_routes.begin(), sorted_routes.end(),
+        [](const auto& a, const auto& b) {
+            return std::get<5>(a) > std::get<5>(b);
+        });
+
+    // Print top routes by volume
+    std::cout << "\nTop Routes by Volume:" << std::endl;
+    std::cout << "------------------------------------------------------" << std::endl;
+    std::cout << "Mode | Origin | Dest | Route ID | Volume | Cost (min)" << std::endl;
+    std::cout << "------------------------------------------------------" << std::endl;
+
+    // Print at most 10 routes
+    int count = 0;
+    for (const auto& tuple : sorted_routes) {
+        if (count >= 10) break;
+
+        int mode = std::get<0>(tuple);
+        int origin = std::get<1>(tuple);
+        int dest = std::get<2>(tuple);
+        int route_id = std::get<3>(tuple);
+        double cost = std::get<4>(tuple);
+        double volume = std::get<5>(tuple);
+
+        // Only print routes with volume > 0
+        if (volume > 0) {
+            std::cout << std::setw(4) << mode << " | "
+                << std::setw(6) << origin << " | "
+                << std::setw(4) << dest << " | "
+                << std::setw(8) << route_id << " | "
+                << std::setw(6) << std::fixed << std::setprecision(1) << volume << " | "
+                << std::setw(9) << std::fixed << std::setprecision(2) << cost << std::endl;
+            count++;
+        }
+    }
+
+    if (count == 0) {
+        std::cout << "No routes with positive volume found." << std::endl;
+    }
+
+    std::cout << "------------------------------------------------------" << std::endl;
+
+    // Export results
+    //  exportNetworkToJSON(network, "network_results.json");
+
+    return 0;
+}
