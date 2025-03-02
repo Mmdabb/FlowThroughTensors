@@ -1,6 +1,7 @@
 #include "Json.hpp"
 
 #include <algorithm>
+#include <climits>
 #include <cmath>
 #include <ctime>
 #include <fstream>
