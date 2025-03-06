@@ -21,11 +21,11 @@ __all__ = [
 
 current_os = platform.system()
 if current_os == "Darwin":
-    library_name = "DTALite_arm.dylib"
+    library_name = "libFlowThroughTensors.dylib"
 elif current_os == "Windows":
-    library_name = "DTALite.dll"
+    library_name = "libFlowThroughTensors.dll"
 elif current_os == "Linux":
-    library_name = "DTALite.so"
+    library_name = "libFlowThroughTensors.so"
 else:
     raise OSError("Unsupported operating system")
 
