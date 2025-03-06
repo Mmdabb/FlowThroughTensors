@@ -24,8 +24,3 @@ Ensure you have the following installed:
 
 To build the package, navigate to the project directory and execute the following:
 
-```sh
-mkdir build
-cd build
-cmake ..
-make
