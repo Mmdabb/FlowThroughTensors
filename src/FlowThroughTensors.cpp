@@ -1861,7 +1861,7 @@ private:
 };
 
 // Example usage
-int main() {
+int AssignmentAPI() {
     // Create network
     Network network;
 
@@ -1988,3 +1988,13 @@ int main() {
 
     return 0;
 }
+
+
+void DTA_AssignmentAPI() {
+	AssignmentAPI();
+}
+
+
+// void DTA_SimulationAPI() {
+// 	SimulationAPI();
+// }
