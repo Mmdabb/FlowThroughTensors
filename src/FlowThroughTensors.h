@@ -9,4 +9,4 @@
 
 extern "C" PATH_ENGINE_API void DTA_AssignmentAPI();
 
-extern "C" PATH_ENGINE_API void DTA_SimulationAPI();
+// extern "C" PATH_ENGINE_API void DTA_SimulationAPI();
