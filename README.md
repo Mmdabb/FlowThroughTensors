@@ -15,7 +15,7 @@ FlowThroughTensor is built as a standalone C++ package. To use it, follow these 
 
 Ensure you have the following installed:
 
-- **C++17 or later**
+- **C++14 or later**
 - **CMake** (for building the project)
 - **JSON for Modern C++** (included in the repository)
 - **OpenMP** (optional, for parallel processing)
